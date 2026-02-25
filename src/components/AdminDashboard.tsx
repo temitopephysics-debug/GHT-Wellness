@@ -45,6 +45,15 @@ export default function AdminDashboard({ adminPassword }: AdminDashboardProps) {
       const res = await fetch(`/api/admin/${activeTable}`, {
         headers: { "x-admin-password": adminPassword }
       });
+      if (!res.ok) {
+        const text = await res.text();
+        if (text.includes("Rate exceeded")) {
+          console.warn("Rate limit exceeded for admin data, retrying in 2s...");
+          setTimeout(fetchData, 2000);
+          return;
+        }
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
       const result = await res.json();
       if (Array.isArray(result)) {
         setData(result);

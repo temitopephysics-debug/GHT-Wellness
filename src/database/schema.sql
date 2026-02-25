@@ -108,6 +108,30 @@ CREATE TRIGGER update_products_modtime BEFORE UPDATE ON products FOR EACH ROW EX
 CREATE TRIGGER update_blog_posts_modtime BEFORE UPDATE ON blog_posts FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER update_orders_modtime BEFORE UPDATE ON orders FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
+-- 7. RECOMMENDED PACKAGES
+CREATE TABLE recommended_packages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    description TEXT,
+    price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
+    discount NUMERIC(12, 2) DEFAULT 0 CHECK (discount >= 0),
+    package_image_url TEXT,
+    health_benefits TEXT[] DEFAULT '{}',
+    symptoms TEXT[] DEFAULT '{}',
+    package_code TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 8. PACKAGE PRODUCTS (Junction Table)
+CREATE TABLE package_products (
+    package_id UUID REFERENCES recommended_packages(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+    PRIMARY KEY (package_id, product_id)
+);
+
+CREATE TRIGGER update_recommended_packages_modtime BEFORE UPDATE ON recommended_packages FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
 -- ==========================================
 -- ROW LEVEL SECURITY (RLS) - ANONYMOUS
 -- ==========================================
@@ -118,10 +142,14 @@ ALTER TABLE consultations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE blog_posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recommended_packages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE package_products ENABLE ROW LEVEL SECURITY;
 
 -- PUBLIC READ ACCESS
 CREATE POLICY "Anyone can view products" ON products FOR SELECT USING (true);
 CREATE POLICY "Anyone can view blogs" ON blog_posts FOR SELECT USING (true);
+CREATE POLICY "Anyone can view recommended packages" ON recommended_packages FOR SELECT USING (true);
+CREATE POLICY "Anyone can view package products" ON package_products FOR SELECT USING (true);
 
 -- ANONYMOUS SESSION ACCESS
 -- We assume the 'app.current_access_token' is set by the backend for each request

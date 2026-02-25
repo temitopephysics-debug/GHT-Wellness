@@ -24,21 +24,8 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { CONFIG } from "./config";
 
-interface Product {
-  id: string;
-  name: string;
-  product_code: string;
-  short_desc: string;
-  long_desc: string;
-  usage: string;
-  warning: string;
-  package: string;
-  ingredients: string;
-  price_naira: number;
-  discount_percent: number;
-  health_benefits: string[];
-  image_url: string;
-}
+import { PackageCard } from "./components/PackageCard";
+import { Product, PackageData } from "./types";
 
 interface Blog {
   id: string;
@@ -59,57 +46,10 @@ interface Consultation {
   created_at: string;
 }
 
-interface DiseaseSolution {
-  id: string;
-  name: string;
-  description: string;
-  product_codes: string[];
-  synergy: string;
-  icon: any;
-  symptoms?: string[];
-  themeColor?: string;
-  accentColor?: string;
-  bundle_image?: string;
-}
-
-const RECOMMENDED_SOLUTIONS: DiseaseSolution[] = [
-  {
-    id: "prostate",
-    name: "Prostate Health Solution",
-    description: "Natural cure for PROSTATE. A comprehensive combination designed to support prostate function, reduce inflammation, and improve urinary flow.",
-    product_codes: ["A07", "A12", "A06"],
-    synergy: "These products work together to balance hormones, provide essential minerals like Zinc, and reduce oxidative stress in the prostate gland.",
-    icon: ShieldCheck,
-    themeColor: "bg-emerald-900",
-    accentColor: "text-emerald-400",
-    bundle_image: "https://picsum.photos/seed/prostate-bundle/800/600",
-    symptoms: [
-      "Trouble starting/stopping urination",
-      "Blood in urine or semen",
-      "Weak or interrupted urine flow"
-    ]
-  },
-  {
-    id: "heart-failure",
-    name: "Heart Failure Support",
-    description: "Expert-curated bundle to strengthen heart muscles, improve circulation, and manage cardiovascular stress.",
-    product_codes: ["A05", "A09"],
-    synergy: "The combination of Ginseng's energy-boosting properties and specific cardiovascular support helps maintain a steady heart rhythm and healthy blood pressure.",
-    icon: Activity,
-    themeColor: "bg-blue-900",
-    accentColor: "text-blue-400",
-    bundle_image: "https://picsum.photos/seed/heart-bundle/800/600",
-    symptoms: [
-      "Shortness of breath during activity",
-      "Fatigue and weakness",
-      "Swelling in legs, ankles and feet"
-    ]
-  }
-];
-
 export default function App() {
   const [activeTab, setActiveTab] = useState<"products" | "recommended" | "blogs" | "consultation" | "history" | "product-detail">("products");
   const [products, setProducts] = useState<Product[]>([]);
+  const [recommendedPackages, setRecommendedPackages] = useState<PackageData[]>([]);
   const [blogs, setBlogs] = useState<Blog[]>([]);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -139,12 +79,22 @@ export default function App() {
   useEffect(() => {
     fetchProducts();
     fetchBlogs();
+    fetchRecommendedPackages();
     if (activeTab === "history") fetchHistory();
   }, [activeTab]);
 
   const fetchProducts = async () => {
     try {
       const res = await fetch("/api/products");
+      if (!res.ok) {
+        const text = await res.text();
+        if (text.includes("Rate exceeded")) {
+          console.warn("Rate limit exceeded for products, retrying in 2s...");
+          setTimeout(fetchProducts, 2000);
+          return;
+        }
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
       const data = await res.json();
       if (Array.isArray(data)) {
         setProducts(data);
@@ -161,6 +111,15 @@ export default function App() {
   const fetchBlogs = async () => {
     try {
       const res = await fetch("/api/blogs");
+      if (!res.ok) {
+        const text = await res.text();
+        if (text.includes("Rate exceeded")) {
+          console.warn("Rate limit exceeded for blogs, retrying in 2s...");
+          setTimeout(fetchBlogs, 2000);
+          return;
+        }
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
       const data = await res.json();
       if (Array.isArray(data)) {
         setBlogs(data);
@@ -171,6 +130,30 @@ export default function App() {
     } catch (e) {
       console.error("Failed to fetch blogs:", e);
       setBlogs([]);
+    }
+  };
+
+  const fetchRecommendedPackages = async () => {
+    try {
+      const res = await fetch("/api/recommended-packages");
+      if (!res.ok) {
+        const text = await res.text();
+        if (text.includes("Rate exceeded")) {
+          console.warn("Rate limit exceeded for packages, retrying in 2s...");
+          setTimeout(fetchRecommendedPackages, 2000);
+          return;
+        }
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setRecommendedPackages(data);
+      } else {
+        setRecommendedPackages([]);
+      }
+    } catch (e) {
+      console.error("Failed to fetch recommended packages:", e);
+      setRecommendedPackages([]);
     }
   };
 
@@ -207,6 +190,15 @@ export default function App() {
       const res = await fetch("/api/my-consultations", {
         headers: { "x-access-token": accessToken }
       });
+      if (!res.ok) {
+        const text = await res.text();
+        if (text.includes("Rate exceeded")) {
+          console.warn("Rate limit exceeded for history, retrying in 2s...");
+          setTimeout(fetchHistory, 2000);
+          return;
+        }
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
       const data = await res.json();
       if (Array.isArray(data)) {
         setConsultations(data);
@@ -363,7 +355,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 phablet:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-8">
+              <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 min-[1440px]:grid-cols-4 gap-3 md:gap-8">
                 {products
                   .filter((p) => {
                     const query = searchQuery.toLowerCase();
@@ -575,136 +567,28 @@ export default function App() {
               <div className="text-center max-w-3xl mx-auto space-y-4">
                 <h2 className="text-3xl md:text-5xl font-black text-slate-900 leading-tight">Expert-Curated Solutions</h2>
                 <p className="text-lg text-slate-600 font-medium leading-relaxed">
-                  We've combined our most effective products into targeted bundles to address specific health concerns with maximum synergy.
+                  Discover powerful combinations designed to target specific health concerns with maximum synergy.
                 </p>
               </div>
 
-              <div className="space-y-16">
-                {RECOMMENDED_SOLUTIONS.map((solution) => (
-                  <div key={solution.id} className="bg-white rounded-[40px] border border-slate-100 shadow-2xl overflow-hidden group relative">
-                    {/* Poster Style Header Section */}
-                    <div className={`${solution.themeColor || 'bg-slate-900'} p-8 md:p-12 lg:p-16 text-white relative overflow-hidden`}>
-                      {/* Decorative Background Elements */}
-                      <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
-                      <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl" />
-
-                      <div className="relative z-10 flex flex-col md:flex-row justify-between gap-12">
-                        <div className="space-y-8 max-w-3xl">
-                          <div className="inline-block">
-                            <div className="bg-white/10 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/20">
-                              <p className="text-xl md:text-2xl font-medium text-white/90 italic">Natural cure for</p>
-                              <h3 className="text-5xl md:text-8xl font-black uppercase tracking-tighter leading-none mt-1">
-                                {solution.id === 'prostate' ? 'PROSTATE' : solution.name.split(' ')[0]}
-                              </h3>
-                            </div>
-                          </div>
-
-                          {solution.symptoms && (
-                            <div className="space-y-4">
-                              <div className="inline-block bg-red-600 px-4 py-1.5 rounded-lg text-sm font-black uppercase tracking-widest">
-                                PERFECT FOR:
-                              </div>
-                              <ul className="space-y-3">
-                                {solution.symptoms.map((symptom, i) => (
-                                  <li key={i} className="flex items-start gap-3 text-lg md:text-2xl font-bold text-white/90">
-                                    <span className="text-emerald-400 mt-1.5">*</span>
-                                    <span>{symptom}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Delivery Badge - Poster Style */}
-                        <div className="shrink-0 flex items-center justify-center">
-                          <div className="relative w-32 h-32 md:w-48 md:h-48 animate-pulse">
-                            <div className="absolute inset-0 bg-red-600 rotate-45 shadow-2xl" style={{ clipPath: 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)' }} />
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4">
-                              <span className="text-[10px] md:text-xs font-black uppercase tracking-tighter leading-none">DELIVERY</span>
-                              <span className="text-sm md:text-xl font-black uppercase tracking-tighter leading-none">WORLDWIDE</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-8 md:p-12 lg:p-16 space-y-12 bg-gradient-to-b from-slate-50 to-white">
-                      {/* Bundle Combination Image */}
-                      {solution.bundle_image && (
-                        <div className="relative -mt-24 md:-mt-32 mb-12 flex justify-center">
-                          <div className="bg-white p-4 rounded-[40px] shadow-2xl border border-slate-100 max-w-2xl w-full">
-                            <img 
-                              src={solution.bundle_image} 
-                              alt={`${solution.name} Bundle`}
-                              className="w-full h-auto rounded-[32px] object-cover"
-                              referrerPolicy="no-referrer"
-                            />
-                            <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-6 py-2 rounded-full font-black text-sm uppercase tracking-widest shadow-xl">
-                              Complete Treatment Set
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Products Grid - Poster Style Layout */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-12 items-end">
-                        {solution.product_codes.map((code, idx) => {
-                          const product = products.find(p => p.product_code === code);
-                          if (!product) return null;
-                          return (
-                            <div 
-                              key={product.id}
-                              onClick={() => {
-                                setViewingProduct(product);
-                                setActiveTab("product-detail");
-                              }}
-                              className="group/prod cursor-pointer"
-                            >
-                              <div className="bg-white rounded-[32px] p-6 md:p-8 shadow-xl border border-slate-100 group-hover/prod:shadow-2xl group-hover/prod:-translate-y-2 transition-all duration-500 text-center space-y-4">
-                                <div className="aspect-[3/4] relative">
-                                  <img 
-                                    src={product.image_url} 
-                                    alt={product.name}
-                                    className="w-full h-full object-contain mix-blend-multiply group-hover/prod:scale-110 transition-transform duration-700"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                </div>
-                                <div className="space-y-1">
-                                  <h4 className="text-xl font-black text-slate-900 group-hover/prod:text-emerald-700 transition-colors">{product.name}</h4>
-                                  <div className="text-emerald-600 font-black text-[10px] uppercase tracking-widest">{product.product_code}</div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Synergy & Action */}
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-12 border-t border-slate-200 items-center">
-                        <div className="lg:col-span-2 flex items-start gap-6">
-                          <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
-                            <Info size={24} />
-                          </div>
-                          <div className="space-y-2">
-                            <h4 className="font-black text-slate-900 uppercase tracking-widest text-sm">Expert Recommendation:</h4>
-                            <p className="text-slate-700 font-medium text-lg leading-relaxed">{solution.synergy}</p>
-                          </div>
-                        </div>
-                        <div className="space-y-4">
-                          <button className="w-full bg-emerald-600 text-white py-6 rounded-[24px] font-black text-xl hover:bg-emerald-700 transition-all shadow-2xl shadow-emerald-200 active:scale-[0.98] flex items-center justify-center gap-3">
-                            <ShoppingBag size={24} />
-                            Order Complete Bundle
-                          </button>
-                          <div className="flex items-center justify-center gap-2 text-slate-400 text-xs font-black uppercase tracking-widest">
-                            <Globe size={14} />
-                            Free Shipping Worldwide
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+              <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 min-[1440px]:grid-cols-4 gap-8 md:gap-10">
+                {recommendedPackages.map((pkg) => (
+                  <PackageCard 
+                    key={pkg.id}
+                    data={pkg}
+                    allPackages={recommendedPackages}
+                    onViewProduct={(product) => {
+                      setViewingProduct(product);
+                      setActiveTab("product-detail");
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                  />
                 ))}
+                {recommendedPackages.length === 0 && (
+                  <div className="col-span-full py-20 text-center">
+                    <p className="text-slate-500">No recommended packages found.</p>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -1193,10 +1077,10 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="relative w-full max-w-4xl bg-white rounded-t-[32px] md:rounded-[32px] overflow-hidden shadow-2xl flex flex-col md:flex-row h-[90vh] md:h-auto md:max-h-[90vh]"
+              className="relative w-full max-w-5xl bg-white rounded-t-[32px] lg:rounded-[32px] overflow-hidden shadow-2xl flex flex-col lg:flex-row h-[90vh] lg:h-auto lg:max-h-[90vh]"
             >
               {/* Mobile Drag Handle */}
-              <div className="md:hidden w-full flex justify-center pt-3 pb-1 shrink-0">
+              <div className="lg:hidden w-full flex justify-center pt-3 pb-1 shrink-0">
                 <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
               </div>
 
@@ -1208,17 +1092,17 @@ export default function App() {
               </button>
 
               {/* Modal Image Section */}
-              <div className="w-full md:w-1/2 bg-slate-50 flex items-center justify-center p-6 md:p-12 border-b md:border-b-0 md:border-r border-slate-100 h-[30vh] md:h-auto shrink-0">
+              <div className="w-full lg:w-1/2 bg-slate-50 flex items-center justify-center p-6 lg:p-12 border-b lg:border-b-0 lg:border-r border-slate-100 h-[55vh] lg:h-auto shrink-0 overflow-y-auto custom-scrollbar">
                 <img 
                   src={selectedProduct.image_url} 
                   alt={selectedProduct.name}
-                  className="w-full h-full object-contain mix-blend-multiply scale-110"
+                  className="w-full h-full object-contain mix-blend-multiply scale-150 md:scale-175 lg:scale-110"
                   referrerPolicy="no-referrer"
                 />
               </div>
 
               {/* Modal Content Section */}
-              <div className="w-full md:w-1/2 p-6 md:p-12 overflow-y-auto bg-white custom-scrollbar pb-40 md:pb-12">
+              <div className="w-full lg:w-1/2 p-6 lg:p-12 overflow-y-auto bg-white custom-scrollbar pb-12">
                 <div className="space-y-6 md:space-y-8">
                   <div>
                     <div className="text-emerald-600 font-black text-[10px] md:text-xs uppercase tracking-widest mb-2 flex items-center gap-2">
@@ -1273,7 +1157,7 @@ export default function App() {
                     )}
                   </div>
 
-                  <div className="sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg pt-4 pb-8 px-6 md:px-0 md:static md:bg-transparent flex flex-col gap-3 border-t border-slate-100 md:border-t-0 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] md:shadow-none z-50">
+                  <div className="flex flex-col gap-3 pt-8 border-t border-slate-100">
                     <button className="w-full bg-emerald-600 text-white py-4 md:py-6 rounded-2xl font-black text-lg md:text-2xl hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 active:scale-[0.98] flex items-center justify-center gap-3 md:gap-4">
                       <ShoppingBag size={22} className="md:w-[28px] md:h-[28px]" />
                       Add to Cart

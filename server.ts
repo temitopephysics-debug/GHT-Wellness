@@ -86,6 +86,28 @@ async function startServer() {
     res.json(data || []);
   });
 
+  app.get("/api/recommended-packages", async (req, res) => {
+    if (!supabase) return res.json([]);
+    const { data, error } = await supabase
+      .from('recommended_packages')
+      .select(`
+        *,
+        package_products (
+          products (*)
+        )
+      `);
+    
+    if (error) return res.status(500).json({ error: error.message });
+    
+    // Format the data to flatten the products array for easier frontend consumption
+    const formatted = data?.map((pkg: any) => ({
+      ...pkg,
+      products: pkg.package_products?.map((pp: any) => pp.products).filter(Boolean) || []
+    })) || [];
+    
+    res.json(formatted);
+  });
+
   app.post("/api/consultations", async (req, res) => {
     if (!supabase) return res.status(503).json({ error: "Database not configured" });
     const { patient_name, phone, illness, symptoms, distributor_id } = req.body;

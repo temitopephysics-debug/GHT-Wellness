@@ -8,7 +8,12 @@ export const CONFIG = {
     name: import.meta.env.VITE_COMPANY_NAME || "SD GHT HEALTH CARE",
     subtitle: import.meta.env.VITE_COMPANY_SUBTITLE || "NIGERIA LTD",
     phone: import.meta.env.VITE_CONTACT_PHONE || "+234 (0) 123 456 789",
-    logoUrl: import.meta.env.VITE_LOGO_URL || "", // Add this line
+    logoUrl: import.meta.env.VITE_LOGO_URL || "",
+    bankDetails: {
+      bankName: import.meta.env.VITE_BANK_NAME || "ZENITH BANK",
+      accountNumber: import.meta.env.VITE_ACCOUNT_NUMBER || "1234567890",
+      accountName: import.meta.env.VITE_ACCOUNT_NAME || "SD GHT HEALTH CARE LTD"
+    }
   },
   defaults: {
     distributorId: import.meta.env.VITE_DEFAULT_DISTRIBUTOR_ID || "SD-GHT-MEMBER-001",

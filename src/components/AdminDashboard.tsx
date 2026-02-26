@@ -11,14 +11,15 @@ import {
   Users, 
   ClipboardList,
   Lock as LockIcon,
-  Eye
+  Eye,
+  ShoppingBag
 } from "lucide-react";
 
 interface AdminDashboardProps {
   adminPassword: string;
 }
 
-type TableName = "products" | "blog_posts" | "consultations" | "profiles";
+type TableName = "products" | "blog_posts" | "consultations" | "profiles" | "orders";
 
 export default function AdminDashboard({ adminPassword }: AdminDashboardProps) {
   const [activeTable, setActiveTable] = useState<TableName>("products");
@@ -32,6 +33,7 @@ export default function AdminDashboard({ adminPassword }: AdminDashboardProps) {
     { id: "products", label: "Products", icon: Package },
     { id: "blog_posts", label: "Blog Posts", icon: FileText },
     { id: "consultations", label: "Consultations", icon: ClipboardList },
+    { id: "orders", label: "Orders", icon: ShoppingBag },
     { id: "profiles", label: "Profiles", icon: Users },
   ];
 

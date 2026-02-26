@@ -115,6 +115,32 @@ async function startServer() {
     
     if (!access_token) return res.status(401).json({ error: "No session token found" });
 
+    // 1. Handle Profile (Create or Find)
+    let profile_id: string | null = null;
+    try {
+      const { data: profile, error: pError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('phone_number', phone)
+        .maybeSingle();
+      
+      if (pError) throw pError;
+
+      if (profile) {
+        profile_id = profile.id;
+      } else {
+        const { data: newProfile, error: nError } = await supabase
+          .from('profiles')
+          .insert([{ full_name: patient_name, phone_number: phone, access_token }])
+          .select('id')
+          .single();
+        if (nError) throw nError;
+        profile_id = newProfile.id;
+      }
+    } catch (e) {
+      console.error("Profile Error:", e);
+    }
+
     // Fetch products to give context to Gemini
     const { data: products } = await supabase.from('products').select('name, short_desc');
     const productList = products?.map((p: any) => p.name).join(", ") || "";
@@ -144,6 +170,7 @@ async function startServer() {
       .from('consultations')
       .insert([
         { 
+          profile_id,
           patient_name, 
           phone, 
           illness, 
@@ -172,6 +199,107 @@ async function startServer() {
     
     if (error) return res.status(500).json({ error: error.message });
     res.json(data);
+  });
+
+  app.get("/api/my-orders", async (req, res) => {
+    const access_token = getAccessToken(req);
+    if (!access_token) return res.json([]);
+
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        order_items (
+          *,
+          products (*)
+        )
+      `)
+      .eq('access_token', access_token);
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  });
+
+  app.post("/api/orders", async (req, res) => {
+    if (!supabase) return res.status(503).json({ error: "Database not configured" });
+    const access_token = getAccessToken(req);
+    if (!access_token) return res.status(401).json({ error: "No session token found" });
+
+    const { 
+      full_name, 
+      phone_number, 
+      delivery_address, 
+      landmark, 
+      delivery_date, 
+      payment_method, 
+      sender_name,
+      items,
+      total_amount,
+      distributor_id
+    } = req.body;
+
+    // 1. Handle Profile (Create or Find)
+    let profile_id: string | null = null;
+    try {
+      const { data: profile, error: pError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('phone_number', phone_number)
+        .maybeSingle();
+      
+      if (pError) throw pError;
+
+      if (profile) {
+        profile_id = profile.id;
+      } else {
+        const { data: newProfile, error: nError } = await supabase
+          .from('profiles')
+          .insert([{ full_name, phone_number, access_token }])
+          .select('id')
+          .single();
+        if (nError) throw nError;
+        profile_id = newProfile.id;
+      }
+    } catch (e) {
+      console.error("Profile Error:", e);
+      return res.status(500).json({ error: "Failed to create/find profile" });
+    }
+
+    // 2. Create Order
+    const { data: order, error: oError } = await supabase
+      .from('orders')
+      .insert([
+        { 
+          profile_id,
+          total_amount,
+          status: 'pending',
+          shipping_address: `${delivery_address}${landmark ? ` (Landmark: ${landmark})` : ''}`,
+          access_token,
+          distributor_id
+        }
+      ])
+      .select()
+      .single();
+
+    if (oError) return res.status(500).json({ error: oError.message });
+
+    // 3. Create Order Items
+    if (items && Array.isArray(items)) {
+      const orderItems = items.map((item: any) => ({
+        order_id: order.id,
+        product_id: item.id,
+        quantity: item.quantity || 1,
+        price_at_time: item.price_at_time || (item.price_naira * (1 - (item.discount_percent || 0) / 100))
+      }));
+
+      const { error: oiError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+      
+      if (oiError) console.error("Order Items Error:", oiError);
+    }
+
+    res.json(order);
   });
 
   if (process.env.NODE_ENV !== "production") {

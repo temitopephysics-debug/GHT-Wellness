@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Star, ShieldCheck, ChevronRight, CheckCircle2, Globe, Truck, Eye, Leaf, Activity, Award } from 'lucide-react';
+import { Star, ShieldCheck, ChevronRight, CheckCircle2, Globe, Truck, Eye, Leaf, Activity, Award, Plus, Minus } from 'lucide-react';
 import { CONFIG } from '../config';
 import { PackageQuickView } from './PackageQuickView';
 import { PackageData, Product } from '../types';
@@ -7,12 +7,13 @@ import { PackageData, Product } from '../types';
 interface PackageCardProps {
   data: PackageData;
   allPackages?: PackageData[];
-  onOrder?: () => void;
+  onOrder?: (quantity: number) => void;
   onViewProduct?: (product: Product) => void;
 }
 
 export const PackageCard: React.FC<PackageCardProps> = ({ data, allPackages, onOrder, onViewProduct }) => {
   const [isQuickViewOpen, setIsQuickViewOpen] = useState(false);
+  const [quantity, setQuantity] = useState(1);
   const discountedPrice = data.price * (1 - (data.discount / 100));
 
   return (
@@ -162,9 +163,33 @@ export const PackageCard: React.FC<PackageCardProps> = ({ data, allPackages, onO
           </div>
 
           {/* Action Button - Refined Size */}
-          <div className="pt-0.5 flex flex-col items-center gap-1">
+          <div className="pt-0.5 flex flex-col items-center gap-2">
+            <div className="flex items-center justify-between w-full bg-slate-50 p-1 rounded-lg border border-slate-100">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Qty</span>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setQuantity(Math.max(1, quantity - 1));
+                  }}
+                  className="w-8 h-8 bg-white text-slate-400 rounded-lg flex items-center justify-center hover:bg-slate-100 transition-colors border border-slate-200"
+                >
+                  <Minus size={14} />
+                </button>
+                <span className="text-sm font-black text-slate-900 w-6 text-center">{quantity}</span>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setQuantity(quantity + 1);
+                  }}
+                  className="w-8 h-8 bg-emerald-600 text-white rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
             <button 
-              onClick={onOrder}
+              onClick={() => onOrder?.(quantity)}
               className="w-full bg-emerald-600 text-white py-2 md:py-2.5 rounded-lg md:rounded-xl font-black text-base hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 active:scale-[0.98] flex items-center justify-center gap-1 md:gap-2 group/order animate-shimmer"
             >
               Order
@@ -183,9 +208,9 @@ export const PackageCard: React.FC<PackageCardProps> = ({ data, allPackages, onO
         onClose={() => setIsQuickViewOpen(false)}
         data={data}
         allPackages={allPackages}
-        onOrder={() => {
+        onOrder={(qty) => {
           setIsQuickViewOpen(false);
-          onOrder?.();
+          onOrder?.(qty);
         }}
         onViewProduct={(product) => {
           setIsQuickViewOpen(false);

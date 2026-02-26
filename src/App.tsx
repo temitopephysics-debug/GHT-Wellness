@@ -5,6 +5,7 @@ import {
   ShoppingBag, 
   User, 
   Search, 
+  History,
   ChevronRight, 
   Stethoscope, 
   Phone, 
@@ -19,12 +20,18 @@ import {
   Eye,
   Leaf,
   ArrowLeft,
-  Info
+  Info,
+  MessageSquare,
+  MapPin,
+  Plus,
+  Minus
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CONFIG } from "./config";
 
 import { PackageCard } from "./components/PackageCard";
+import { OrderDrawer } from "./components/OrderDrawer";
+import AdminDashboard from "./components/AdminDashboard";
 import { Product, PackageData } from "./types";
 
 interface Blog {
@@ -47,16 +54,49 @@ interface Consultation {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"products" | "recommended" | "blogs" | "consultation" | "history" | "product-detail">("products");
+  const [activeTab, setActiveTab] = useState<"products" | "recommended" | "blogs" | "consultation" | "history" | "product-detail" | "admin">("products");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [recommendedPackages, setRecommendedPackages] = useState<PackageData[]>([]);
   const [blogs, setBlogs] = useState<Blog[]>([]);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false);
+  const [orderItem, setOrderItem] = useState<{ item: any, type: 'package' | 'product', qty: number } | null>(null);
+  const [distributorId, setDistributorId] = useState(CONFIG.defaults.distributorId);
+  const [detailQuantity, setDetailQuantity] = useState(1);
+  const [quickViewQuantity, setQuickViewQuantity] = useState(1);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const dId = params.get('ref') || params.get('distributor_id');
+    if (dId) setDistributorId(dId);
+  }, []);
+
+  useEffect(() => {
+    if (selectedProduct) setQuickViewQuantity(1);
+  }, [selectedProduct]);
+
+  const openOrderDrawer = (item: any, type: 'package' | 'product', qty: number = 1) => {
+    setOrderItem({ item, type, qty });
+    setIsOrderDrawerOpen(true);
+    setSelectedProduct(null); // Close quick view modal if open
+  };
   const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [zoomPos, setZoomPos] = useState({ x: 0, y: 0 });
+  const [isZoomed, setIsZoomed] = useState(false);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+    const x = ((e.pageX - left) / width) * 100;
+    const y = ((e.pageY - top) / height) * 100;
+    setZoomPos({ x, y });
+  };
 
   // Robust Session Management (Anonymous RLS)
   const [accessToken] = useState(() => {
@@ -73,8 +113,12 @@ export default function App() {
     phone: "",
     illness: "",
     symptoms: "",
-    distributor_id: CONFIG.defaults.distributorId
+    distributor_id: distributorId
   });
+
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, distributor_id: distributorId }));
+  }, [distributorId]);
 
   useEffect(() => {
     fetchProducts();
@@ -187,26 +231,22 @@ export default function App() {
   const fetchHistory = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/my-consultations", {
-        headers: { "x-access-token": accessToken }
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        if (text.includes("Rate exceeded")) {
-          console.warn("Rate limit exceeded for history, retrying in 2s...");
-          setTimeout(fetchHistory, 2000);
-          return;
-        }
-        throw new Error(`HTTP error! status: ${res.status}`);
+      const [cRes, oRes] = await Promise.all([
+        fetch("/api/my-consultations", { headers: { "x-access-token": accessToken } }),
+        fetch("/api/my-orders", { headers: { "x-access-token": accessToken } })
+      ]);
+
+      if (cRes.ok) {
+        const cData = await cRes.json();
+        setConsultations(Array.isArray(cData) ? cData : []);
       }
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setConsultations(data);
-      } else {
-        setConsultations([]);
+
+      if (oRes.ok) {
+        const oData = await oRes.json();
+        setOrders(Array.isArray(oData) ? oData : []);
       }
     } catch (e) {
-      setConsultations([]);
+      console.error("Failed to fetch history:", e);
     } finally {
       setLoading(false);
     }
@@ -242,7 +282,9 @@ export default function App() {
             {CONFIG.navigation.map((item) => {
               const Icon = item.id === "products" ? ShoppingBag : 
                            item.id === "blogs" ? BookOpen : 
-                           item.id === "consultation" ? Stethoscope : User;
+                           item.id === "consultation" ? Stethoscope : 
+                           item.id === "history" ? History :
+                           item.id === "admin" ? DbIcon : User;
               return (
                 <button
                   key={item.id}
@@ -292,7 +334,9 @@ export default function App() {
                 {CONFIG.navigation.map((item) => {
                   const Icon = item.id === "products" ? ShoppingBag : 
                                item.id === "blogs" ? BookOpen : 
-                               item.id === "consultation" ? Stethoscope : User;
+                               item.id === "consultation" ? Stethoscope : 
+                               item.id === "history" ? History :
+                               item.id === "admin" ? DbIcon : User;
                   return (
                     <button
                       key={item.id}
@@ -518,7 +562,10 @@ export default function App() {
 
                       {/* Action Button - Refined Size */}
                       <div className="pt-0.5 flex flex-col items-center gap-1">
-                        <button className="w-full bg-emerald-600 text-white py-2 md:py-2.5 rounded-lg md:rounded-xl font-black text-base hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 active:scale-[0.98] flex items-center justify-center gap-1 md:gap-2 group/order animate-shimmer">
+                        <button 
+                          onClick={() => openOrderDrawer(product, 'product')}
+                          className="w-full bg-emerald-600 text-white py-2 md:py-2.5 rounded-lg md:rounded-xl font-black text-base hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 active:scale-[0.98] flex items-center justify-center gap-1 md:gap-2 group/order animate-shimmer"
+                        >
                           Order
                           <ChevronRight size={14} className="md:size-4 group-hover/order:translate-x-1 transition-transform" />
                         </button>
@@ -577,6 +624,7 @@ export default function App() {
                     key={pkg.id}
                     data={pkg}
                     allPackages={recommendedPackages}
+                    onOrder={() => openOrderDrawer(pkg, 'package')}
                     onViewProduct={(product) => {
                       setViewingProduct(product);
                       setActiveTab("product-detail");
@@ -613,16 +661,27 @@ export default function App() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                 {/* Left: Image Gallery Style */}
                 <div className="space-y-6">
-                  <div className="bg-white rounded-[40px] p-8 md:p-16 border border-slate-100 shadow-sm flex items-center justify-center aspect-square relative overflow-hidden group">
+                  <div 
+                    className="bg-white rounded-[40px] p-8 md:p-16 border border-slate-100 shadow-sm flex items-center justify-center aspect-square relative overflow-hidden group cursor-zoom-in"
+                    onMouseMove={handleMouseMove}
+                    onMouseEnter={() => setIsZoomed(true)}
+                    onMouseLeave={() => setIsZoomed(false)}
+                  >
                     <img 
                       src={viewingProduct.image_url} 
                       alt={viewingProduct.name}
-                      className="w-full h-full object-contain mix-blend-multiply transition-transform duration-700 group-hover:scale-110"
+                      className={`w-full h-full object-contain mix-blend-multiply transition-transform duration-200 ${isZoomed ? 'scale-[2.5]' : 'scale-100'}`}
+                      style={isZoomed ? { transformOrigin: `${zoomPos.x}% ${zoomPos.y}%` } : {}}
                       referrerPolicy="no-referrer"
                     />
-                    <div className="absolute top-8 right-8 bg-red-600 text-white px-4 py-2 rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl animate-pulse">
+                    <div className="absolute top-8 right-8 bg-red-600 text-white px-4 py-2 rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl animate-pulse z-10">
                       -{viewingProduct.discount_percent}% OFF
                     </div>
+                    {!isZoomed && (
+                      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-md px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest text-slate-500 border border-slate-200 opacity-0 group-hover:opacity-100 transition-opacity">
+                        Hover to Zoom
+                      </div>
+                    )}
                   </div>
                   
                   <div className="grid grid-cols-3 gap-4">
@@ -678,15 +737,43 @@ export default function App() {
                     {viewingProduct.short_desc}
                   </p>
 
+                  <div className="flex items-center gap-6 bg-slate-50 p-4 rounded-2xl border border-slate-100 w-fit">
+                    <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Quantity</span>
+                    <div className="flex items-center gap-4">
+                      <button 
+                        onClick={() => setDetailQuantity(Math.max(1, detailQuantity - 1))}
+                        className="w-10 h-10 bg-white text-slate-400 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors border border-slate-200"
+                      >
+                        <Minus size={18} />
+                      </button>
+                      <span className="text-xl font-black text-slate-900 w-8 text-center">{detailQuantity}</span>
+                      <button 
+                        onClick={() => setDetailQuantity(detailQuantity + 1)}
+                        className="w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center hover:bg-emerald-700 transition-colors"
+                      >
+                        <Plus size={18} />
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Action Buttons */}
                   <div className="flex flex-col sm:flex-row gap-4">
-                    <button className="flex-1 bg-emerald-600 text-white py-5 rounded-2xl font-black text-xl hover:bg-emerald-700 transition-all shadow-2xl shadow-emerald-200 active:scale-[0.98] flex items-center justify-center gap-3">
+                    <button 
+                      onClick={() => openOrderDrawer(viewingProduct, 'product', detailQuantity)}
+                      className="flex-1 bg-emerald-600 text-white py-5 rounded-2xl font-black text-xl hover:bg-emerald-700 transition-all shadow-2xl shadow-emerald-200 active:scale-[0.98] flex items-center justify-center gap-3"
+                    >
                       <ShoppingBag size={24} />
-                      Add to Cart
+                      Order Now
                     </button>
-                    <button className="flex-1 bg-white border-2 border-slate-200 text-slate-900 py-5 rounded-2xl font-black text-xl hover:bg-slate-50 transition-all flex items-center justify-center gap-3">
-                      <Phone size={24} />
-                      Order via WhatsApp
+                    <button 
+                      onClick={() => {
+                        const message = `Hello SD GHT Health Care, I am interested in ${viewingProduct.name}. Could you please provide more information on how I can place an order?`;
+                        window.open(`https://wa.me/${CONFIG.company.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+                      }}
+                      className="flex-1 bg-white border-2 border-slate-200 text-slate-900 py-5 rounded-2xl font-black text-xl hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
+                    >
+                      <MessageSquare size={24} />
+                      Chat on WhatsApp
                     </button>
                   </div>
 
@@ -933,7 +1020,7 @@ export default function App() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="max-w-4xl mx-auto space-y-8"
+              className="max-w-4xl mx-auto space-y-12"
             >
               <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm flex items-center justify-between">
                 <div>
@@ -946,7 +1033,12 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Consultations Section */}
               <div className="space-y-6">
+                <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
+                  <History className="text-emerald-600" />
+                  Consultations
+                </h3>
                 {consultations.length > 0 ? (
                   consultations.map((c) => (
                     <div key={c.id} className="bg-white rounded-3xl border border-slate-200 p-8 hover:border-emerald-200 transition-colors">
@@ -993,12 +1085,102 @@ export default function App() {
                   ))
                 ) : (
                   !loading && (
-                    <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
-                      <p className="text-slate-400">No records found for your session.</p>
+                    <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-slate-200">
+                      <p className="text-slate-400">No consultations found.</p>
                     </div>
                   )
                 )}
               </div>
+
+              {/* Orders Section */}
+              <div className="space-y-6">
+                <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
+                  <ShoppingBag className="text-emerald-600" />
+                  Orders
+                </h3>
+                {orders.length > 0 ? (
+                  orders.map((o) => (
+                    <div key={o.id} className="bg-white rounded-3xl border border-slate-200 p-8 hover:border-emerald-200 transition-colors">
+                      <div className="flex justify-between items-start mb-6">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">Order ID: {o.id.slice(0, 8)}</span>
+                          <h3 className="text-xl font-bold text-slate-900 mt-1">Order Status: {o.status}</h3>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs text-slate-500">{new Date(o.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="bg-slate-50 p-6 rounded-2xl space-y-3">
+                          <p className="text-xs text-slate-400 font-black uppercase tracking-widest">Items Ordered</p>
+                          {o.order_items?.map((item: any) => (
+                            <div key={item.id} className="flex justify-between items-center">
+                              <span className="font-bold text-slate-700">{item.products?.name} x{item.quantity}</span>
+                              <span className="font-black text-slate-900">₦{Number(item.price_at_time).toLocaleString()}</span>
+                            </div>
+                          ))}
+                          <div className="pt-3 border-t border-slate-200 flex justify-between items-center">
+                            <span className="font-black text-slate-400 uppercase text-xs tracking-widest">Total Amount</span>
+                            <span className="text-xl font-black text-emerald-600">₦{Number(o.total_amount).toLocaleString()}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 text-slate-500 text-sm font-medium">
+                          <MapPin size={16} className="text-slate-300" />
+                          {o.shipping_address}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  !loading && (
+                    <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-slate-200">
+                      <p className="text-slate-400">No orders found.</p>
+                    </div>
+                  )
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === "admin" && (
+            <motion.div
+              key="admin"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-8"
+            >
+              {!isAdminAuthenticated ? (
+                <div className="max-w-md mx-auto bg-white rounded-[32px] p-8 border border-slate-200 shadow-2xl">
+                  <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mb-6">
+                    <DbIcon size={32} className="text-emerald-600" />
+                  </div>
+                  <h2 className="text-2xl font-black text-slate-900 mb-2">Admin Access</h2>
+                  <p className="text-slate-500 text-sm mb-8">Please enter the administrative password to manage the database.</p>
+                  
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Password</label>
+                      <input 
+                        type="password"
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                      />
+                    </div>
+                    <button 
+                      onClick={() => setIsAdminAuthenticated(true)}
+                      className="w-full h-14 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-xl active:scale-95"
+                    >
+                      Unlock Dashboard
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <AdminDashboard adminPassword={adminPassword} />
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -1158,9 +1340,30 @@ export default function App() {
                   </div>
 
                   <div className="flex flex-col gap-3 pt-8 border-t border-slate-100">
-                    <button className="w-full bg-emerald-600 text-white py-4 md:py-6 rounded-2xl font-black text-lg md:text-2xl hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 active:scale-[0.98] flex items-center justify-center gap-3 md:gap-4">
+                    <div className="flex items-center gap-6 bg-slate-50 p-4 rounded-2xl border border-slate-100 w-full justify-between">
+                      <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Quantity</span>
+                      <div className="flex items-center gap-4">
+                        <button 
+                          onClick={() => setQuickViewQuantity(Math.max(1, quickViewQuantity - 1))}
+                          className="w-10 h-10 bg-white text-slate-400 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors border border-slate-200"
+                        >
+                          <Minus size={18} />
+                        </button>
+                        <span className="text-xl font-black text-slate-900 w-8 text-center">{quickViewQuantity}</span>
+                        <button 
+                          onClick={() => setQuickViewQuantity(quickViewQuantity + 1)}
+                          className="w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center hover:bg-emerald-700 transition-colors"
+                        >
+                          <Plus size={18} />
+                        </button>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => openOrderDrawer(selectedProduct, 'product', quickViewQuantity)}
+                      className="w-full bg-emerald-600 text-white py-4 md:py-6 rounded-2xl font-black text-lg md:text-2xl hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 active:scale-[0.98] flex items-center justify-center gap-3 md:gap-4"
+                    >
                       <ShoppingBag size={22} className="md:w-[28px] md:h-[28px]" />
-                      Add to Cart
+                      Order Now
                     </button>
                     <button 
                       onClick={() => {
@@ -1173,6 +1376,16 @@ export default function App() {
                       <Info size={20} />
                       View Full Details
                     </button>
+                    <button 
+                      onClick={() => {
+                        const message = `Hello SD GHT Health Care, I am interested in ${selectedProduct.name}. Could you please provide more information on how I can place an order?`;
+                        window.open(`https://wa.me/${CONFIG.company.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+                      }}
+                      className="w-full bg-emerald-50 text-emerald-700 py-3 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-100 transition-all"
+                    >
+                      <MessageSquare size={18} />
+                      Chat on WhatsApp
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1180,6 +1393,21 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Order Drawer */}
+      {orderItem && (
+        <OrderDrawer 
+          isOpen={isOrderDrawerOpen}
+          onClose={() => {
+            setIsOrderDrawerOpen(false);
+            setTimeout(() => setOrderItem(null), 500); // Wait for slide-out animation
+          }}
+          item={orderItem.item}
+          type={orderItem.type}
+          distributorId={distributorId}
+          initialQuantity={orderItem.qty}
+        />
+      )}
     </div>
   );
 }

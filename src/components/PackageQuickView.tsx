@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Star, ShieldCheck, ChevronRight, CheckCircle2, Globe, Truck, Info } from 'lucide-react';
+import { X, Star, ShieldCheck, ChevronRight, CheckCircle2, Globe, Truck, Info, MessageSquare, Plus, Minus } from 'lucide-react';
+import { CONFIG } from '../config';
 import { PackageData, Product } from '../types';
 
 interface PackageQuickViewProps {
@@ -8,7 +9,7 @@ interface PackageQuickViewProps {
   onClose: () => void;
   data: PackageData;
   allPackages?: PackageData[];
-  onOrder?: () => void;
+  onOrder?: (quantity: number) => void;
   onViewProduct?: (product: Product) => void;
 }
 
@@ -33,7 +34,12 @@ export const PackageQuickView: React.FC<PackageQuickViewProps> = ({
   onViewProduct
 }) => {
   const theme = themeColors.emerald;
+  const [quantity, setQuantity] = React.useState(1);
   const discountedPrice = data.price * (1 - (data.discount / 100));
+
+  React.useEffect(() => {
+    if (isOpen) setQuantity(1);
+  }, [isOpen]);
 
   return (
     <AnimatePresence>
@@ -213,13 +219,43 @@ export const PackageQuickView: React.FC<PackageQuickViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        <div className="flex items-center gap-6 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                          <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Qty</span>
+                          <div className="flex items-center gap-4">
+                            <button 
+                              onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                              className="w-10 h-10 bg-white text-slate-400 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors border border-slate-200"
+                            >
+                              <Minus size={18} />
+                            </button>
+                            <span className="text-xl font-black text-slate-900 w-8 text-center">{quantity}</span>
+                            <button 
+                              onClick={() => setQuantity(quantity + 1)}
+                              className="w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center hover:bg-emerald-700 transition-colors"
+                            >
+                              <Plus size={18} />
+                            </button>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => onOrder?.(quantity)}
+                          className="flex-grow h-16 bg-slate-900 text-white rounded-2xl font-black text-lg uppercase tracking-[0.2em] hover:bg-emerald-600 transition-all duration-300 shadow-xl active:scale-[0.98] flex items-center justify-center gap-3 group/btn"
+                        >
+                          Buy Now
+                          <ChevronRight size={22} className="group-hover/btn:translate-x-1 transition-transform" />
+                        </button>
+                      </div>
                       <button 
-                        onClick={onOrder}
-                        className="flex-grow h-16 bg-slate-900 text-white rounded-2xl font-black text-lg uppercase tracking-[0.2em] hover:bg-emerald-600 transition-all duration-300 shadow-xl active:scale-[0.98] flex items-center justify-center gap-3 group/btn"
+                        onClick={() => {
+                          const message = `Hello SD GHT Health Care, I am interested in the ${data.name} package. Could you please provide more information on how I can place an order?`;
+                          window.open(`https://wa.me/${CONFIG.company.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+                        }}
+                        className="w-full h-16 bg-white border-2 border-slate-200 text-slate-900 rounded-2xl font-black text-lg uppercase tracking-[0.1em] hover:bg-slate-50 transition-all duration-300 flex items-center justify-center gap-3"
                       >
-                        Buy Now
-                        <ChevronRight size={22} className="group-hover/btn:translate-x-1 transition-transform" />
+                        <MessageSquare size={22} />
+                        Chat on WhatsApp
                       </button>
                     </div>
 
